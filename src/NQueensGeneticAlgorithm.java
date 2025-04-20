@@ -11,6 +11,7 @@ public class NQueensGeneticAlgorithm {
 
     public NQueensGeneticAlgorithm(int N) {
         this.N = N;
+        // Use available cores to parallelize fitness evaluation
         executor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
 
@@ -21,15 +22,19 @@ public class NQueensGeneticAlgorithm {
         int[] bestSolution = null;
         long startTime = System.currentTimeMillis();
 
+        // Keep evolving until a perfect solution is found or max generations reached
         while (maxFitness != N && generation < 1000) {
             int[][] newPopulation = new int[populationSize][N];
             List<Future<Integer>> fitnessFutures = new ArrayList<>();
+
+            // Parallel fitness evaluation for each chromosome
             for (int i = 0; i < populationSize; i++) {
                 int[] solution = population[i];
                 Future<Integer> future = executor.submit(() -> calculateFitness(solution));
                 fitnessFutures.add(future);
             }
 
+            // Track best solution in this generation
             for (int i = 0; i < populationSize; i++) {
                 try {
                     int fitness = fitnessFutures.get(i).get();
@@ -49,7 +54,7 @@ public class NQueensGeneticAlgorithm {
 
             if (maxFitness == N) break;
 
-            // Selection, crossover, and mutation
+            // Create new population using genetic operators
             for (int i = 0; i < populationSize; i++) {
                 int[] parent1 = selectParent();
                 int[] parent2 = selectParent();
@@ -73,67 +78,101 @@ public class NQueensGeneticAlgorithm {
         System.out.println("Runtime: " + runTime + " milliseconds");
     }
 
+    // Generates random permutations of rows for each column — valid initial queens
     private void initializePopulation() {
         population = new int[populationSize][N];
         for (int i = 0; i < populationSize; i++) {
-            int queensPlaced = random.nextInt(N) + 1; // Place 1 to N queens randomly
-            for (int j = 0; j < queensPlaced; j++) {
-                int position = random.nextInt(N);
-                population[i][position] = 1; // Place queen at random position
+            List<Integer> rows = new ArrayList<>();
+            for (int j = 0; j < N; j++) {
+                rows.add(j);
+            }
+            Collections.shuffle(rows);
+            for (int j = 0; j < N; j++) {
+                population[i][j] = rows.get(j); // Each index = column, value = row
             }
         }
     }
 
+    // Random parent selection (can replace with tournament or roulette if needed)
     private int[] selectParent() {
         return population[random.nextInt(populationSize)];
     }
 
+    // Crossover with duplicate avoidance (PMX-style) to preserve valid permutations
     private int[] crossover(int[] parent1, int[] parent2) {
         int[] child = new int[N];
+        boolean[] used = new boolean[N];
         int crossoverPoint = random.nextInt(N);
 
-        System.arraycopy(parent1, 0, child, 0, crossoverPoint);
-        System.arraycopy(parent2, crossoverPoint, child, crossoverPoint, N - crossoverPoint);
+        // Copy prefix from parent1
+        for (int i = 0; i < crossoverPoint; i++) {
+            child[i] = parent1[i];
+            used[parent1[i]] = true;
+        }
+
+        // Fill remaining with values from parent2 avoiding duplicates
+        int index = crossoverPoint;
+        for (int i = 0; i < N; i++) {
+            int val = parent2[i];
+            if (!used[val]) {
+                child[index++] = val;
+                used[val] = true;
+            }
+        }
+
+        // Fill remaining unused values if any spots are left
+        for (int i = 0; i < N; i++) {
+            if (!used[i]) {
+                child[index++] = i;
+            }
+        }
 
         return child;
     }
 
+    // Mutation by swapping two columns (maintains valid permutation)
     private void mutate(int[] child) {
-        for (int i = 0; i < N; i++) {
-            if (random.nextDouble() < mutationRate) {
-                child[i] = random.nextInt(N);
-            }
+        if (random.nextDouble() < mutationRate) {
+            int i = random.nextInt(N);
+            int j = random.nextInt(N);
+            int temp = child[i];
+            child[i] = child[j];
+            child[j] = temp;
         }
     }
 
+    // Fitness = N - number of diagonal conflicts (rows and columns are guaranteed unique)
     private int calculateFitness(int[] solution) {
         int conflicts = 0;
         for (int i = 0; i < N; i++) {
             for (int j = i + 1; j < N; j++) {
-                if (solution[i] == solution[j] || Math.abs(solution[i] - solution[j]) == Math.abs(i - j)) {
+                // Diagonal attack check
+                if (Math.abs(solution[i] - solution[j]) == Math.abs(i - j)) {
                     conflicts++;
                 }
             }
         }
-        return N - conflicts;
+        return N - conflicts; // Higher fitness means fewer conflicts
     }
 
+    // Pretty-prints the board with Qs
     private void displaySolution(int[] solution) {
-        for (int i = 0; i < N; i++) {
-            for (int j = 0; j < N; j++) {
-                System.out.print(solution[j] == i ? " Q " : " _ ");
+        for (int row = 0; row < N; row++) {
+            for (int col = 0; col < N; col++) {
+                System.out.print(solution[col] == row ? " Q " : " _ ");
             }
             System.out.println();
         }
     }
 
+    // Entry point: prompts user to repeatedly test different N values
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         boolean continueExecution = true;
         while (continueExecution) {
             System.out.print("Enter the value of N (4 <= N <= 20): ");
             int N = scanner.nextInt();
-            scanner.nextLine(); // Consume the newline character
+            scanner.nextLine(); // Consume newline
             if (N >= 4 && N <= 20) {
                 NQueensGeneticAlgorithm ga = new NQueensGeneticAlgorithm(N);
                 ga.solve();
