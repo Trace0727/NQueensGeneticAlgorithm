@@ -10,6 +10,7 @@ A Java-based multithreaded implementation of a genetic algorithm for solving the
 NQueensGeneticAlgorithm/
 ├── src/
 │   └── NQueensGeneticAlgorithm.java
+└──
 ```
 
 ---
